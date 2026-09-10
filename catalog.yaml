@@ -69,7 +69,7 @@ skills:
       runtime: ['Python >=3.8']
       packages: [playwright, pandas, openpyxl, jinja2]
       commands: ['playwright install chromium']
-      project_files: [scripts/lojaeletrica_scraper.py, scripts/run_scraper.bat]
+      external_project_files: [scripts/lojaeletrica_scraper.py, scripts/run_scraper.bat]
       services: [lojaeletrica.com.br]
     compatibility:
       standard: agentskills.io
@@ -87,7 +87,7 @@ skills:
     version: "1.0"
     dependencies:
       runtime: [Python]
-      project_files: [scripts/search.py, lojaeletrica_raw.json]
+      external_project_files: [scripts/search.py, lojaeletrica_raw.json]
       related_skills: [lojaeletrica-scraper]
     compatibility:
       standard: agentskills.io

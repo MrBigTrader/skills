@@ -21,13 +21,21 @@ As Agent Skills estendem a capacidade do assistente de codificação (como o Gem
 
 ## Fundação do catálogo canônico
 
-`catalog.yaml` registra as skills canônicas e seus alvos. As verificações atuais são somente locais:
+`catalog.yaml` registra as skills canônicas e seus alvos. A execução padrão é um PLAN estritamente read-only:
 
 ```powershell
 python scripts/validate_catalog.py
 python scripts/deploy_dry_run.py
 ```
 
-O dry-run apenas imprime o plano; ele não copia, exclui, sobrescreve ou cria arquivos nos diretórios das plataformas.
+O PLAN apenas inspeciona e imprime o estado; ele não copia, exclui, sobrescreve ou cria arquivos nos diretórios das plataformas.
+
+O APPLY é uma operação mutável e deve ser solicitado explicitamente:
+
+```powershell
+python scripts/deploy_dry_run.py --apply
+```
+
+O APPLY executa um novo preflight e cria somente destinos governados ausentes classificados como `CREATE`. Destinos `IDENTICAL` não são alterados, e qualquer drift, conflito, dependência ausente ou condição estrutural insegura bloqueia toda a execução. Esta versão não atualiza nem sobrescreve destinos existentes e não possui rollback automático para destinos já promovidos antes de uma falha posterior.
 
 > **Atenção:** `sync_skills.py` é automação legada de importação reversa com commit e push. Não o execute no fluxo canônico. Ele será tratado separadamente e não é usado pelos scripts acima.
