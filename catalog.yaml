@@ -1,0 +1,150 @@
+schema_version: 1
+repository: MrBigTrader/skills
+canonical_root: skills
+
+skills:
+  - name: github-workflow-sergio
+    path: skills/github-workflow-sergio
+    ownership: owned
+    targets: [codex, gemini-cli, antigravity, hermes]
+    source:
+      type: repository
+      repository: MrBigTrader/skills
+      note: Autoria e manutenção próprias.
+    version: "1.0.0"
+    dependencies:
+      commands: [gh, git]
+      services: [GitHub]
+    compatibility:
+      standard: agentskills.io
+      status: portable
+      notes: Regras operacionais aplicáveis aos quatro hosts; requer GitHub CLI autenticado para operações GitHub.
+
+  - name: google-antigravity-sdk
+    path: skills/google-antigravity-sdk
+    ownership: vendored
+    targets: [codex, gemini-cli, antigravity, hermes]
+    source:
+      type: platform-plugin
+      location: Gemini/Antigravity plugin root
+      upstream: unknown
+      note: Snapshot importado de plugin; origem upstream exata ainda não registrada.
+    dependencies:
+      runtime: [Python]
+      packages: [google-antigravity]
+      environment: [GEMINI_API_KEY]
+      optional_files: [plugin.json]
+    compatibility:
+      standard: agentskills.io
+      status: portable-with-platform-extension
+      notes: SKILL.md é portável; plugin.json é específico do Antigravity e os references/examples citados não estão vendorizados.
+
+  - name: instagram-agent-powerplug
+    path: skills/instagram-agent-powerplug
+    ownership: owned
+    targets: [codex, gemini-cli, antigravity, hermes]
+    source:
+      type: local-project
+      project: PowerPlug
+      note: Skill própria para conteúdo da PowerPlug.
+    dependencies:
+      capabilities: [web-search, content-generation]
+      project_paths:
+        - 'C:\projetos\powerplug_insta'
+    compatibility:
+      standard: agentskills.io
+      status: windows-project-bound
+      notes: Formato portável; o caminho de saída é específico do projeto PowerPlug nesta máquina Windows.
+
+  - name: lojaeletrica-scraper
+    path: skills/lojaeletrica-scraper
+    ownership: owned
+    targets: [codex, gemini-cli, antigravity, hermes]
+    source:
+      type: local-project
+      project: web loja eletrica
+      note: Skill própria do projeto Loja Elétrica.
+    version: "1.2"
+    dependencies:
+      runtime: ['Python >=3.8']
+      packages: [playwright, pandas, openpyxl, jinja2]
+      commands: ['playwright install chromium']
+      project_files: [scripts/lojaeletrica_scraper.py, scripts/run_scraper.bat]
+      services: [lojaeletrica.com.br]
+    compatibility:
+      standard: agentskills.io
+      status: windows-project-bound
+      notes: Formato portável; execução depende dos scripts do projeto, Chromium/Playwright e automação Windows.
+
+  - name: lojaeletrica-search
+    path: skills/lojaeletrica-search
+    ownership: owned
+    targets: [codex, gemini-cli, antigravity, hermes]
+    source:
+      type: local-project
+      project: web loja eletrica
+      note: Skill própria do projeto Loja Elétrica.
+    version: "1.0"
+    dependencies:
+      runtime: [Python]
+      project_files: [scripts/search.py, lojaeletrica_raw.json]
+      related_skills: [lojaeletrica-scraper]
+    compatibility:
+      standard: agentskills.io
+      status: project-bound
+      notes: Formato portável; execução depende do CLI e do arquivo de dados mantidos no projeto Loja Elétrica.
+
+  - name: pdf-to-markdown
+    path: skills/pdf-to-markdown
+    ownership: owned
+    targets: [codex, gemini-cli, antigravity, hermes]
+    source:
+      type: local-skill
+      location: Global Gemini
+      note: Implementação adaptada ao ambiente local de conversão de PDFs.
+    dependencies:
+      runtime: ['Python >=3.10']
+      packages: [pdfplumber, 'markitdown[pdf]', marker-pdf]
+      optional: [PyTorch with CUDA, NVIDIA GPU]
+      bundled_scripts: [scripts/convert_pdf.py, scripts/verify_cuda.py]
+    compatibility:
+      standard: agentskills.io
+      status: portable-with-optional-gpu
+      notes: Conversão digital é portável; OCR acelerado e parte do troubleshooting são específicos de CUDA/Windows.
+
+  - name: self-learning
+    path: skills/self-learning
+    ownership: vendored
+    targets: [codex, gemini-cli, antigravity, hermes]
+    source:
+      type: third-party
+      author: kulaxyz
+      upstream: unknown
+      note: Snapshot de terceiro sem URL upstream registrada; não há evidência de manutenção independente local.
+    version: "1.0"
+    dependencies:
+      capabilities: [skill-authoring, file-write]
+      optional: [subagent-delegation, persistent-memory]
+      bundled_resources: [references/skill-authoring.md, assets/SKILL.template.md]
+    compatibility:
+      standard: agentskills.io
+      status: portable-with-policy-review
+      notes: Portável em formato, mas contém caminhos legados de Codex e recomenda escrita autônoma sem confirmação; exige revisão antes do deploy.
+
+  - name: skill-creator
+    path: skills/skill-creator
+    ownership: vendored
+    targets: [codex, gemini-cli, antigravity, hermes]
+    source:
+      type: upstream-repository
+      repository: anthropics/skills
+      url: https://github.com/anthropics/skills/tree/main/skills/skill-creator
+      note: Snapshot upstream sem divergência funcional local comprovada; por isso vendored, não forked.
+    dependencies:
+      runtime: [Python]
+      capabilities: [subagent-delegation, file-write, process-execution]
+      bundled_resources: [agents, assets, eval-viewer, references, scripts]
+    compatibility:
+      standard: agentskills.io
+      status: portable-with-host-adapters
+      notes: SKILL.md é portável; avaliação, subagentes e visualizador dependem das ferramentas disponíveis em cada host.
