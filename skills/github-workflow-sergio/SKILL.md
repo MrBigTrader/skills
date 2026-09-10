@@ -80,7 +80,11 @@ A solicitação deve identificar claramente:
 - O efeito esperado.
 - O comando, ou uma descrição precisa dos comandos, que serão executados.
 
-A confirmação vale somente para a ação e para o alvo apresentados. Não reutilize uma confirmação para ações adicionais ou diferentes.
+A confirmação vale somente para uma única operação remota e para o alvo apresentados. Não reutilize uma confirmação para ações adicionais ou diferentes.
+
+- Nunca agrupe duas ou mais operações remotas distintas em uma única solicitação de autorização, mesmo quando fizerem parte da mesma tarefa ou sequência de trabalho.
+- Solicite e obtenha uma confirmação independente para cada operação remota. Por exemplo, um `push` e a criação de um Pull Request exigem duas confirmações separadas.
+- Depois de executar uma operação remota autorizada, verifique seu resultado antes de solicitar confirmação para a próxima operação.
 
 Exigem confirmação explícita específica, entre outras:
 
