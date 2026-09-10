@@ -210,44 +210,45 @@ class DeployPlanTests(unittest.TestCase):
 
         self.assertEqual(MISSING_DEPENDENCY, status)
 
-    def test_external_project_files_present_allow_create(self) -> None:
+    def test_external_project_files_absent_do_not_block_plan(self) -> None:
         self.source()
-        external_root = self.root / "external-project"
-        external_file = external_root / "scripts" / "run.py"
-        external_file.parent.mkdir(parents=True)
-        external_file.write_text("print('external')\n", encoding="utf-8")
         catalog = self.catalog(
-            dependencies={
-                "external_project_root": str(external_root),
-                "external_project_files": ["scripts/run.py"],
-            }
+            dependencies={"external_project_files": ["scripts/missing.py"]}
         )
 
         status = self.single_status(catalog, {"codex": self.destination_root})
 
         self.assertEqual(CREATE, status)
 
-    def test_external_project_files_absent_are_missing_dependency(self) -> None:
-        self.source()
-        external_root = self.root / "external-project"
+    def test_external_project_files_absent_do_not_block_apply_or_get_copied(self) -> None:
+        source = self.source(files={"canonical.txt": "canonical"})
+        self.destination_root.mkdir()
         catalog = self.catalog(
-            dependencies={
-                "external_project_root": str(external_root),
-                "external_project_files": ["scripts/missing.py"],
-            }
+            dependencies={"external_project_files": ["scripts/missing.py"]}
         )
 
-        status = self.single_status(catalog, {"codex": self.destination_root})
+        result = apply_deployment(catalog, self.repo, {"codex": self.destination_root})
 
-        self.assertEqual(MISSING_DEPENDENCY, status)
+        destination = self.destination_root / "example-skill"
+        self.assertEqual(1, len(result.created))
+        self.assertEqual(bundle_manifest(source), bundle_manifest(destination))
+        self.assertFalse((destination / "scripts" / "missing.py").exists())
 
-    def test_external_project_files_without_resolvable_location_are_blocked(self) -> None:
+    def test_external_project_files_are_never_modified(self) -> None:
         self.source()
-        catalog = self.catalog(dependencies={"external_project_files": ["scripts/run.py"]})
+        self.destination_root.mkdir()
+        external_file = self.root / "external-project" / "scripts" / "run.py"
+        external_file.parent.mkdir(parents=True)
+        external_file.write_text("external-original", encoding="utf-8")
+        before = external_file.read_bytes()
+        catalog = self.catalog(
+            dependencies={"external_project_files": ["scripts/run.py"]}
+        )
 
-        status = self.single_status(catalog, {"codex": self.destination_root})
+        apply_deployment(catalog, self.repo, {"codex": self.destination_root})
 
-        self.assertEqual(BLOCKED, status)
+        self.assertEqual(before, external_file.read_bytes())
+        self.assertFalse((self.destination_root / "example-skill" / "scripts" / "run.py").exists())
 
     def test_missing_target_root_is_blocked(self) -> None:
         self.source()

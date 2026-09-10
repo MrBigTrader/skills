@@ -281,53 +281,6 @@ def missing_local_dependencies(skill: Mapping[str, object], source: Path) -> lis
     return sorted(set(missing))
 
 
-def dependency_problem(
-    skill: Mapping[str, object], source: Path
-) -> tuple[str | None, str | None]:
-    """Validate bundled and external file dependencies without mixing their roots."""
-    missing_local = missing_local_dependencies(skill, source)
-    if missing_local:
-        return MISSING_DEPENDENCY, "missing: " + ", ".join(missing_local)
-
-    dependencies = skill.get("dependencies")
-    if not isinstance(dependencies, Mapping) or "external_project_files" not in dependencies:
-        return None, None
-
-    references = dependencies.get("external_project_files")
-    if not isinstance(references, Sequence) or isinstance(references, (str, bytes)):
-        return BLOCKED, "dependencies.external_project_files is not a list"
-    if any(not isinstance(reference, str) or not reference for reference in references):
-        return BLOCKED, "dependencies.external_project_files contains an invalid path"
-
-    root_value = dependencies.get("external_project_root")
-    if not isinstance(root_value, str) or not root_value:
-        return BLOCKED, "dependencies.external_project_root is required for external_project_files"
-    try:
-        external_root = _configured_absolute_path(root_value, "dependencies.external_project_root")
-    except ValueError as exc:
-        return BLOCKED, str(exc)
-
-    missing_external: list[str] = []
-    for reference in references:
-        reference_path = Path(reference)
-        if reference_path.is_absolute():
-            return BLOCKED, f"external dependency path must be relative to its root: {reference}"
-        candidate = Path(os.path.abspath(external_root / reference_path))
-        try:
-            candidate.relative_to(external_root)
-        except ValueError:
-            return BLOCKED, f"external dependency escapes configured root: {reference}"
-        for component in _existing_components(candidate):
-            if _is_reparse_point(component):
-                return BLOCKED, f"symlink or junction in external dependency path: {component}"
-        if not candidate.is_file():
-            missing_external.append(str(candidate))
-
-    if missing_external:
-        return MISSING_DEPENDENCY, "missing external: " + ", ".join(sorted(missing_external))
-    return None, None
-
-
 def _physical_key(path: Path) -> str:
     return os.path.normcase(str(Path(os.path.abspath(path)).resolve(strict=False)))
 
@@ -434,9 +387,9 @@ def build_plan(catalog: Mapping[str, object], repo_root: Path, roots: Mapping[st
 
         try:
             source_manifest = bundle_manifest(source)
-            dependency_status, dependency_detail = dependency_problem(skill, source)
-            if dependency_status:
-                source_state[name] = (source_manifest, dependency_status, dependency_detail)
+            missing = missing_local_dependencies(skill, source)
+            if missing:
+                source_state[name] = (source_manifest, MISSING_DEPENDENCY, "missing: " + ", ".join(missing))
             else:
                 source_state[name] = (source_manifest, None, None)
         except (OSError, StructuralError, ValueError) as exc:
