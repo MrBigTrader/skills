@@ -10,7 +10,7 @@ As Agent Skills estendem a capacidade do assistente de codificação (como o Gem
 | :--- | :--- | :--- | :--- |
 | **google-antigravity-sdk** | Design, implement, and debug autonomous AI agents and multi-agent systems using the Google Antigravity (AGY) SDK. ACTIVATE this skill when the user wants to create, configure, or orchestrate Google Antigravity agents. | [./skills/google-antigravity-sdk](./skills/google-antigravity-sdk) | Plugin Root |
 | **github-workflow-sergio** | Use for Git/GitHub work. Enforces Sérgio's remote rules. | [./skills/github-workflow-sergio](./skills/github-workflow-sergio) | Global Hermes |
-| **instagram-agent-powerplug** | Agente de pesquisa e criação de conteúdo para o Instagram da PowerPlug (@powerplug.tech). Pesquisa notícias diárias sobre mobilidade elétrica, carregadores EV, energia solar e  sustentabilidade no Brasil. Ranqueia por viralidade e sugere 2-3 posts/reels prontos  para publicação com legenda, hashtags e CTA. Ativar quando o usuário pedir para pesquisar notícias, sugerir posts, criar conteúdo  para Instagram, ou mencionar "agente instagram", "posts do dia", "conteúdo powerplug". | [./skills/instagram-agent](./skills/instagram-agent) | Projeto: powerplug |
+| **instagram-agent-powerplug** | Agente de pesquisa e criação de conteúdo para o Instagram da PowerPlug (@powerplug.tech). Pesquisa notícias diárias sobre mobilidade elétrica, carregadores EV, energia solar e  sustentabilidade no Brasil. Ranqueia por viralidade e sugere 2-3 posts/reels prontos  para publicação com legenda, hashtags e CTA. Ativar quando o usuário pedir para pesquisar notícias, sugerir posts, criar conteúdo  para Instagram, ou mencionar "agente instagram", "posts do dia", "conteúdo powerplug". | [./skills/instagram-agent-powerplug](./skills/instagram-agent-powerplug) | Projeto: powerplug |
 | **lojaeletrica-scraper** | Use esta skill para entender, executar e expandir o scraper do site Loja Elétrica (lojaeletrica.com.br). Ela detalha as dependências necessárias, os comandos de inicialização do Playwright, as estruturas de saída de dados (JSON e Excel com resumo e formatação) e fornece um guia exato para manutenção e adição de novas categorias de produtos. Use sempre que for planejar alterações no scraper, adicionar categorias, depurar problemas de extração ou rodar coletas no site. | [./skills/lojaeletrica-scraper](./skills/lojaeletrica-scraper) | Projeto: web loja eletrica |
 | **lojaeletrica-search** | Use esta skill para consultar preços e dados de produtos do site Loja Elétrica (lojaeletrica.com.br) a partir dos dados já coletados pelo scraper. Ela permite buscar por nome de produto, material, bitola/medida e categoria usando o CLI scripts/search.py. Use quando o usuário perguntar preços, buscar materiais elétricos, comparar produtos por bitola ou material, ou pedir links de produtos do site — mesmo que não diga "buscar" ou "search" explicitamente. | [./skills/lojaeletrica-search](./skills/lojaeletrica-search) | Global Gemini |
 | **pdf-to-markdown** | Convert PDF files to high-quality Markdown optimized for LLM consumption, using a smart hybrid approach. For digital PDFs (with embedded text), it uses Microsoft MarkItDown for fast CPU-based extraction. For scanned PDFs (image-only), it uses marker-pdf with NVIDIA GPU acceleration (CUDA) for OCR. Use this skill whenever the user wants to convert a PDF to markdown, extract structured text from a PDF for use with LLMs, process scanned or digital PDFs into readable markdown, or mentions markitdown / marker-pdf / marker for document conversion. Also use when the user asks to OCR a PDF, extract text preserving tables and formatting, or prepare PDF content for AI/LLM consumption. This skill handles the full pipeline: detecting PDF type, choosing the best tool, and saving structured LLM-ready output. | [./skills/pdf-to-markdown](./skills/pdf-to-markdown) | Global Gemini |
@@ -19,9 +19,15 @@ As Agent Skills estendem a capacidade do assistente de codificação (como o Gem
 
 ---
 
-## 🔄 Como Sincronizar
-Para coletar novas skills criadas localmente nos projetos ou no diretório AppData global e atualizar este repositório no GitHub, basta executar o script localmente:
+## Fundação do catálogo canônico
+
+`catalog.yaml` registra as skills canônicas e seus alvos. As verificações atuais são somente locais:
+
 ```powershell
-python sync_skills.py
+python scripts/validate_catalog.py
+python scripts/deploy_dry_run.py
 ```
-*(O script atualizará este README, copiará os arquivos e dará o push automático de volta para o GitHub).* 
+
+O dry-run apenas imprime o plano; ele não copia, exclui, sobrescreve ou cria arquivos nos diretórios das plataformas.
+
+> **Atenção:** `sync_skills.py` é automação legada de importação reversa com commit e push. Não o execute no fluxo canônico. Ele será tratado separadamente e não é usado pelos scripts acima.
