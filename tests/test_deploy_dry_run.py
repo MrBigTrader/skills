@@ -19,6 +19,7 @@ from scripts.deploy_dry_run import (
     UNMANAGED_CONFLICT,
     _copy_bundle_safely,
     _classify_destination,
+    _promote_noreplace,
     apply_deployment,
     bundle_manifest,
     build_plan,
@@ -209,6 +210,45 @@ class DeployPlanTests(unittest.TestCase):
 
         self.assertEqual(MISSING_DEPENDENCY, status)
 
+    def test_external_project_files_present_allow_create(self) -> None:
+        self.source()
+        external_root = self.root / "external-project"
+        external_file = external_root / "scripts" / "run.py"
+        external_file.parent.mkdir(parents=True)
+        external_file.write_text("print('external')\n", encoding="utf-8")
+        catalog = self.catalog(
+            dependencies={
+                "external_project_root": str(external_root),
+                "external_project_files": ["scripts/run.py"],
+            }
+        )
+
+        status = self.single_status(catalog, {"codex": self.destination_root})
+
+        self.assertEqual(CREATE, status)
+
+    def test_external_project_files_absent_are_missing_dependency(self) -> None:
+        self.source()
+        external_root = self.root / "external-project"
+        catalog = self.catalog(
+            dependencies={
+                "external_project_root": str(external_root),
+                "external_project_files": ["scripts/missing.py"],
+            }
+        )
+
+        status = self.single_status(catalog, {"codex": self.destination_root})
+
+        self.assertEqual(MISSING_DEPENDENCY, status)
+
+    def test_external_project_files_without_resolvable_location_are_blocked(self) -> None:
+        self.source()
+        catalog = self.catalog(dependencies={"external_project_files": ["scripts/run.py"]})
+
+        status = self.single_status(catalog, {"codex": self.destination_root})
+
+        self.assertEqual(BLOCKED, status)
+
     def test_missing_target_root_is_blocked(self) -> None:
         self.source()
 
@@ -301,6 +341,44 @@ class DeployPlanTests(unittest.TestCase):
 
         self.assertEqual("external", (destination / "racer.txt").read_text(encoding="utf-8"))
         self.assertEqual([], list(self.destination_root.glob(".example-skill.deploy-*")))
+
+    def test_apply_aborts_if_parent_becomes_reparse_before_promotion(self) -> None:
+        self.source()
+        self.destination_root.mkdir()
+        parent = Path(os.path.abspath(self.destination_root))
+        parent_changed = False
+
+        def copy_then_change_parent(source: Path, temporary: Path) -> None:
+            nonlocal parent_changed
+            _copy_bundle_safely(source, temporary)
+            parent_changed = True
+
+        def simulated_reparse(path: Path) -> bool:
+            return parent_changed and Path(os.path.abspath(path)) == parent
+
+        with patch("scripts.deploy_dry_run._copy_bundle_safely", side_effect=copy_then_change_parent):
+            with patch("scripts.deploy_dry_run._is_reparse_point", side_effect=simulated_reparse):
+                with self.assertRaisesRegex(ApplyError, "symlink or junction"):
+                    apply_deployment(self.catalog(), self.repo, {"codex": self.destination_root})
+
+        self.assertFalse((self.destination_root / "example-skill").exists())
+        self.assertEqual([], list(self.destination_root.glob(".example-skill.deploy-*")))
+
+    def test_atomic_promotion_never_overwrites_existing_destination(self) -> None:
+        self.destination_root.mkdir()
+        temporary = self.destination_root / ".example-skill.deploy-test"
+        temporary.mkdir()
+        (temporary / "new.txt").write_text("new", encoding="utf-8")
+        destination = self.destination_root / "example-skill"
+        destination.mkdir()
+        marker = destination / "existing.txt"
+        marker.write_text("existing", encoding="utf-8")
+
+        with self.assertRaises(FileExistsError):
+            _promote_noreplace(temporary, destination, self.destination_root)
+
+        self.assertEqual("existing", marker.read_text(encoding="utf-8"))
+        self.assertTrue(temporary.is_dir())
 
     def test_apply_symlink_or_junction_preflight_produces_zero_writes(self) -> None:
         self.source()

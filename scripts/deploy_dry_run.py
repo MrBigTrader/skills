@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import os
 import shutil
@@ -280,6 +281,53 @@ def missing_local_dependencies(skill: Mapping[str, object], source: Path) -> lis
     return sorted(set(missing))
 
 
+def dependency_problem(
+    skill: Mapping[str, object], source: Path
+) -> tuple[str | None, str | None]:
+    """Validate bundled and external file dependencies without mixing their roots."""
+    missing_local = missing_local_dependencies(skill, source)
+    if missing_local:
+        return MISSING_DEPENDENCY, "missing: " + ", ".join(missing_local)
+
+    dependencies = skill.get("dependencies")
+    if not isinstance(dependencies, Mapping) or "external_project_files" not in dependencies:
+        return None, None
+
+    references = dependencies.get("external_project_files")
+    if not isinstance(references, Sequence) or isinstance(references, (str, bytes)):
+        return BLOCKED, "dependencies.external_project_files is not a list"
+    if any(not isinstance(reference, str) or not reference for reference in references):
+        return BLOCKED, "dependencies.external_project_files contains an invalid path"
+
+    root_value = dependencies.get("external_project_root")
+    if not isinstance(root_value, str) or not root_value:
+        return BLOCKED, "dependencies.external_project_root is required for external_project_files"
+    try:
+        external_root = _configured_absolute_path(root_value, "dependencies.external_project_root")
+    except ValueError as exc:
+        return BLOCKED, str(exc)
+
+    missing_external: list[str] = []
+    for reference in references:
+        reference_path = Path(reference)
+        if reference_path.is_absolute():
+            return BLOCKED, f"external dependency path must be relative to its root: {reference}"
+        candidate = Path(os.path.abspath(external_root / reference_path))
+        try:
+            candidate.relative_to(external_root)
+        except ValueError:
+            return BLOCKED, f"external dependency escapes configured root: {reference}"
+        for component in _existing_components(candidate):
+            if _is_reparse_point(component):
+                return BLOCKED, f"symlink or junction in external dependency path: {component}"
+        if not candidate.is_file():
+            missing_external.append(str(candidate))
+
+    if missing_external:
+        return MISSING_DEPENDENCY, "missing external: " + ", ".join(sorted(missing_external))
+    return None, None
+
+
 def _physical_key(path: Path) -> str:
     return os.path.normcase(str(Path(os.path.abspath(path)).resolve(strict=False)))
 
@@ -386,9 +434,9 @@ def build_plan(catalog: Mapping[str, object], repo_root: Path, roots: Mapping[st
 
         try:
             source_manifest = bundle_manifest(source)
-            missing = missing_local_dependencies(skill, source)
-            if missing:
-                source_state[name] = (source_manifest, MISSING_DEPENDENCY, "missing: " + ", ".join(missing))
+            dependency_status, dependency_detail = dependency_problem(skill, source)
+            if dependency_status:
+                source_state[name] = (source_manifest, dependency_status, dependency_detail)
             else:
                 source_state[name] = (source_manifest, None, None)
         except (OSError, StructuralError, ValueError) as exc:
@@ -512,6 +560,178 @@ def _remove_owned_temporary(path: Path) -> None:
     shutil.rmtree(path)
 
 
+def _windows_promote_noreplace(temporary: Path, destination: Path) -> None:
+    """Rename relative to a pinned Windows parent handle without replacement."""
+    import ctypes
+    from ctypes import wintypes
+
+    file_list_directory = 0x0001
+    file_add_subdirectory = 0x0004
+    file_read_attributes = 0x0080
+    delete_access = 0x00010000
+    share_all = 0x00000001 | 0x00000002 | 0x00000004
+    open_existing = 3
+    backup_semantics = 0x02000000
+    open_reparse_point = 0x00200000
+    file_attribute_reparse_point = 0x00000400
+    file_attribute_tag_info_class = 9
+    file_rename_info_class = 3
+
+    class FileAttributeTagInfo(ctypes.Structure):
+        _fields_ = [("FileAttributes", wintypes.DWORD), ("ReparseTag", wintypes.DWORD)]
+
+    class FileRenameInfo(ctypes.Structure):
+        _fields_ = [
+            ("ReplaceIfExists", ctypes.c_ubyte),
+            ("RootDirectory", wintypes.HANDLE),
+            ("FileNameLength", wintypes.DWORD),
+            ("FileName", wintypes.WCHAR * 1),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    get_info = kernel32.GetFileInformationByHandleEx
+    get_info.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]
+    get_final_path = kernel32.GetFinalPathNameByHandleW
+    get_final_path.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+    set_info = kernel32.SetFileInformationByHandle
+    set_info.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]
+
+    invalid_handle = wintypes.HANDLE(-1).value
+
+    def open_directory(path: Path, access: int, share: int = share_all) -> int:
+        handle = create_file(
+            str(path),
+            access,
+            share,
+            None,
+            open_existing,
+            backup_semantics | open_reparse_point,
+            None,
+        )
+        if handle == invalid_handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        return handle
+
+    def reject_reparse(handle: int, label: str) -> None:
+        info = FileAttributeTagInfo()
+        if not get_info(handle, file_attribute_tag_info_class, ctypes.byref(info), ctypes.sizeof(info)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if info.FileAttributes & file_attribute_reparse_point:
+            raise StructuralError(f"{label} is a symlink or junction")
+
+    def final_path(handle: int) -> str:
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = get_final_path(handle, buffer, len(buffer), 0)
+        if not length or length >= len(buffer):
+            raise ctypes.WinError(ctypes.get_last_error())
+        value = buffer.value
+        if value.startswith("\\\\?\\UNC\\"):
+            return "\\\\" + value[8:]
+        if value.startswith("\\\\?\\"):
+            return value[4:]
+        return value
+
+    parent_handle = open_directory(
+        destination.parent,
+        file_list_directory | file_add_subdirectory | file_read_attributes,
+        0x00000001 | 0x00000002,
+    )
+    temporary_handle: int | None = None
+    try:
+        reject_reparse(parent_handle, f"destination parent {destination.parent}")
+        opened_parent_path = final_path(parent_handle)
+        expected_parent = os.path.normcase(os.path.abspath(destination.parent))
+        opened_parent = os.path.normcase(os.path.abspath(opened_parent_path))
+        if opened_parent != expected_parent:
+            raise StructuralError(f"destination parent changed before promotion: {destination.parent}")
+
+        temporary_handle = open_directory(temporary, delete_access | file_read_attributes)
+        reject_reparse(temporary_handle, f"temporary directory {temporary}")
+
+        encoded_name = str(Path(opened_parent_path) / destination.name).encode("utf-16-le")
+        info_size = ctypes.sizeof(FileRenameInfo) + len(encoded_name)
+        buffer = ctypes.create_string_buffer(info_size)
+        rename_info = ctypes.cast(buffer, ctypes.POINTER(FileRenameInfo)).contents
+        rename_info.ReplaceIfExists = 0
+        rename_info.RootDirectory = None
+        rename_info.FileNameLength = len(encoded_name)
+        ctypes.memmove(ctypes.addressof(buffer) + FileRenameInfo.FileName.offset, encoded_name, len(encoded_name))
+        if not set_info(temporary_handle, file_rename_info_class, buffer, info_size):
+            error = ctypes.get_last_error()
+            if error in (80, 183):
+                raise FileExistsError(error, f"destination appeared before promotion: {destination}")
+            raise ctypes.WinError(error)
+    finally:
+        if temporary_handle is not None:
+            close_handle(temporary_handle)
+        close_handle(parent_handle)
+
+
+def _posix_promote_noreplace(temporary: Path, destination: Path) -> None:
+    """Use Linux renameat2 relative to a pinned no-follow parent descriptor."""
+    import ctypes
+
+    required_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    parent_fd = os.open(destination.parent, required_flags)
+    try:
+        opened = os.fstat(parent_fd)
+        current = os.stat(destination.parent, follow_symlinks=False)
+        if (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino):
+            raise StructuralError(f"destination parent changed before promotion: {destination.parent}")
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = getattr(libc, "renameat2", None)
+        if renameat2 is None:
+            raise OSError(errno.ENOTSUP, "atomic no-replace promotion is unavailable on this POSIX platform")
+        renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            parent_fd,
+            os.fsencode(temporary.name),
+            parent_fd,
+            os.fsencode(destination.name),
+            1,
+        )
+        if result != 0:
+            error = ctypes.get_errno()
+            if error == errno.EEXIST:
+                raise FileExistsError(error, f"destination appeared before promotion: {destination}")
+            raise OSError(error, os.strerror(error), str(destination))
+    finally:
+        os.close(parent_fd)
+
+
+def _promote_noreplace(temporary: Path, destination: Path, root: Path) -> None:
+    """Atomically promote inside a pinned parent, or fail closed if unsupported."""
+    if temporary.parent != destination.parent:
+        raise StructuralError("temporary directory is not a sibling of destination")
+    safety_issue = destination_safety_issue(root, destination)
+    if safety_issue:
+        raise StructuralError(safety_issue)
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError(f"destination appeared before promotion: {destination}")
+
+    if os.name == "nt":
+        _windows_promote_noreplace(temporary, destination)
+    elif os.name == "posix":
+        _posix_promote_noreplace(temporary, destination)
+    else:
+        raise OSError(errno.ENOTSUP, f"atomic no-replace promotion is unsupported on {os.name}")
+
+
 def _apply_create(operation: PlanOperation) -> None:
     source = operation.source
     root = operation.root
@@ -543,13 +763,7 @@ def _apply_create(operation: PlanOperation) -> None:
         if temporary_manifest != source_manifest:
             raise ValueError(f"temporary copy hash mismatch for {operation.skill}")
 
-        safety_issue = destination_safety_issue(root, destination)
-        if safety_issue:
-            raise StructuralError(safety_issue)
-        if destination.exists() or destination.is_symlink():
-            raise FileExistsError(f"destination appeared before promotion: {destination}")
-
-        os.rename(temporary, destination)
+        _promote_noreplace(temporary, destination, root)
         promoted = True
     finally:
         if not promoted:
