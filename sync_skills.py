@@ -6,11 +6,17 @@ import subprocess
 from pathlib import Path
 
 # Configurações de diretórios de busca
-GLOBAL_SKILLS_DIR = Path(r"C:\Users\stgan\.gemini\config\skills")
-GLOBAL_PLUGINS_DIR = Path(r"C:\Users\stgan\.gemini\config\plugins")
+HOME_DIR = Path.home()
+LOCAL_APP_DATA = Path(os.environ.get("LOCALAPPDATA", HOME_DIR / "AppData" / "Local"))
+GLOBAL_SKILLS_DIR = Path(
+    os.environ.get("GEMINI_SKILLS_DIR", HOME_DIR / ".gemini" / "config" / "skills")
+)
+GLOBAL_PLUGINS_DIR = Path(
+    os.environ.get("GEMINI_PLUGINS_DIR", HOME_DIR / ".gemini" / "config" / "plugins")
+)
 PROJECTS_DIR = Path(r"c:\projetos")
-HERMES_GITHUB_WORKFLOW_SKILL_DIR = Path(
-    r"C:\Users\Micro\AppData\Local\hermes\skills\software-development\github-workflow-sergio"
+HERMES_SKILLS_DIR = Path(
+    os.environ.get("HERMES_SKILLS_DIR", LOCAL_APP_DATA / "hermes" / "skills")
 )
 
 # Pasta do repositório de destino
@@ -55,14 +61,13 @@ def find_all_skills() -> list[dict]:
                 skills_found.append({"path": item, "source": "Global Gemini"})
                 visited_paths.add(item)
                 
-    # 2. Inclui somente a skill github-workflow-sergio do Hermes.
-    skill_md = HERMES_GITHUB_WORKFLOW_SKILL_DIR / "SKILL.md"
-    if skill_md.exists() and HERMES_GITHUB_WORKFLOW_SKILL_DIR not in visited_paths:
-        skills_found.append({
-            "path": HERMES_GITHUB_WORKFLOW_SKILL_DIR,
-            "source": "Global Hermes",
-        })
-        visited_paths.add(HERMES_GITHUB_WORKFLOW_SKILL_DIR)
+    # 2. Varre skills globais do Hermes, que podem estar em categorias.
+    if HERMES_SKILLS_DIR.exists():
+        for skill_md in HERMES_SKILLS_DIR.rglob("SKILL.md"):
+            item = skill_md.parent
+            if item not in visited_paths:
+                skills_found.append({"path": item, "source": "Global Hermes"})
+                visited_paths.add(item)
 
     # 3. Varre pasta global de plugins buscando subpastas "skills"
     if GLOBAL_PLUGINS_DIR.exists():
@@ -106,7 +111,11 @@ def sync_skills():
     skills = find_all_skills()
     versioned_hermes_skill_md = DEST_SKILLS_DIR / "github-workflow-sergio" / "SKILL.md"
     preserved_hermes_skill_md = None
-    if not (HERMES_GITHUB_WORKFLOW_SKILL_DIR / "SKILL.md").exists() and versioned_hermes_skill_md.exists():
+    hermes_github_workflow_found = any(
+        s["source"] == "Global Hermes" and s["path"].name == "github-workflow-sergio"
+        for s in skills
+    )
+    if not hermes_github_workflow_found and versioned_hermes_skill_md.exists():
         preserved_hermes_skill_md = versioned_hermes_skill_md.read_bytes()
         skills.append({
             "path": versioned_hermes_skill_md.parent,
