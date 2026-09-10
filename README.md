@@ -1,8 +1,8 @@
-# Central de Skills do Gemini, Claude e Hermes 🧠
+# Central de Skills do Gemini e Claude 🧠
 
 Este repositório armazena e sincroniza centralizadamente todas as **Agent Skills** (competências) personalizadas e automatizadas disponíveis localmente nos projetos ou globalmente na máquina.
 
-As Agent Skills estendem a capacidade de assistentes como Gemini Antigravity, Claude Code e Hermes, permitindo que eles aprendam caminhos operacionais de engenharia, deploys e testes, mantendo a produtividade contínua entre sessões.
+As Agent Skills estendem a capacidade do assistente de codificação (como o Gemini Antigravity ou Claude Code), permitindo que ele aprenda caminhos operacionais de engenharia, deploys e testes, mantendo a produtividade contínua entre sessões.
 
 ## 🛠️ Índice de Skills Disponíveis
 
@@ -20,8 +20,8 @@ As Agent Skills estendem a capacidade de assistentes como Gemini Antigravity, Cl
 ---
 
 ## 🔄 Como Sincronizar
-Para coletar novas skills criadas localmente nos projetos ou nos diretórios globais do Gemini e Hermes, execute:
+Para coletar novas skills criadas localmente nos projetos ou no diretório AppData global e atualizar este repositório no GitHub, basta executar o script localmente:
 ```powershell
 python sync_skills.py
 ```
-Por padrão, o script altera somente o clone local. Depois de revisar as mudanças e obter confirmação explícita para o push, use `python sync_skills.py --push` para também criar o commit e publicar no GitHub.
+*(O script atualizará este README, copiará os arquivos e dará o push automático de volta para o GitHub).* 
