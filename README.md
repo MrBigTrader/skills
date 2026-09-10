@@ -1,14 +1,15 @@
-# Central de Skills do Gemini e Claude 🧠
+# Central de Skills do Gemini, Claude e Hermes 🧠
 
 Este repositório armazena e sincroniza centralizadamente todas as **Agent Skills** (competências) personalizadas e automatizadas disponíveis localmente nos projetos ou globalmente na máquina.
 
-As Agent Skills estendem a capacidade do assistente de codificação (como o Gemini Antigravity ou Claude Code), permitindo que ele aprenda caminhos operacionais de engenharia, deploys e testes, mantendo a produtividade contínua entre sessões.
+As Agent Skills estendem a capacidade de assistentes como Gemini Antigravity, Claude Code e Hermes, permitindo que eles aprendam caminhos operacionais de engenharia, deploys e testes, mantendo a produtividade contínua entre sessões.
 
 ## 🛠️ Índice de Skills Disponíveis
 
 | Skill / Nome | Descrição | Pasta | Origem de Sincronismo |
 | :--- | :--- | :--- | :--- |
 | **google-antigravity-sdk** | Design, implement, and debug autonomous AI agents and multi-agent systems using the Google Antigravity (AGY) SDK. ACTIVATE this skill when the user wants to create, configure, or orchestrate Google Antigravity agents. | [./skills/google-antigravity-sdk](./skills/google-antigravity-sdk) | Plugin Root |
+| **github-workflow-sergio** | Use for Git/GitHub work. Enforces Sérgio's remote rules. | [./skills/github-workflow-sergio](./skills/github-workflow-sergio) | Global Hermes |
 | **instagram-agent-powerplug** | Agente de pesquisa e criação de conteúdo para o Instagram da PowerPlug (@powerplug.tech). Pesquisa notícias diárias sobre mobilidade elétrica, carregadores EV, energia solar e  sustentabilidade no Brasil. Ranqueia por viralidade e sugere 2-3 posts/reels prontos  para publicação com legenda, hashtags e CTA. Ativar quando o usuário pedir para pesquisar notícias, sugerir posts, criar conteúdo  para Instagram, ou mencionar "agente instagram", "posts do dia", "conteúdo powerplug". | [./skills/instagram-agent](./skills/instagram-agent) | Projeto: powerplug |
 | **lojaeletrica-scraper** | Use esta skill para entender, executar e expandir o scraper do site Loja Elétrica (lojaeletrica.com.br). Ela detalha as dependências necessárias, os comandos de inicialização do Playwright, as estruturas de saída de dados (JSON e Excel com resumo e formatação) e fornece um guia exato para manutenção e adição de novas categorias de produtos. Use sempre que for planejar alterações no scraper, adicionar categorias, depurar problemas de extração ou rodar coletas no site. | [./skills/lojaeletrica-scraper](./skills/lojaeletrica-scraper) | Projeto: web loja eletrica |
 | **lojaeletrica-search** | Use esta skill para consultar preços e dados de produtos do site Loja Elétrica (lojaeletrica.com.br) a partir dos dados já coletados pelo scraper. Ela permite buscar por nome de produto, material, bitola/medida e categoria usando o CLI scripts/search.py. Use quando o usuário perguntar preços, buscar materiais elétricos, comparar produtos por bitola ou material, ou pedir links de produtos do site — mesmo que não diga "buscar" ou "search" explicitamente. | [./skills/lojaeletrica-search](./skills/lojaeletrica-search) | Global Gemini |
@@ -19,8 +20,8 @@ As Agent Skills estendem a capacidade do assistente de codificação (como o Gem
 ---
 
 ## 🔄 Como Sincronizar
-Para coletar novas skills criadas localmente nos projetos ou no diretório AppData global e atualizar este repositório no GitHub, basta executar o script localmente:
+Para coletar novas skills criadas localmente nos projetos ou nos diretórios globais do Gemini e Hermes, execute:
 ```powershell
 python sync_skills.py
 ```
-*(O script atualizará este README, copiará os arquivos e dará o push automático de volta para o GitHub).* 
+Por padrão, o script altera somente o clone local. Depois de revisar as mudanças e obter confirmação explícita para o push, use `python sync_skills.py --push` para também criar o commit e publicar no GitHub.

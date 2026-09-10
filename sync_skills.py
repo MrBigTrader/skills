@@ -5,10 +5,20 @@ import shutil
 import subprocess
 from pathlib import Path
 
-# Configurações de diretórios de busca
-GLOBAL_SKILLS_DIR = Path(r"C:\Users\stgan\.gemini\config\skills")
-GLOBAL_PLUGINS_DIR = Path(r"C:\Users\stgan\.gemini\config\plugins")
-PROJECTS_DIR = Path(r"c:\projetos")
+# Configurações de diretórios de busca. Variáveis de ambiente permitem
+# substituir os caminhos sem fixar um nome de usuário no script.
+HOME_DIR = Path.home()
+LOCAL_APP_DATA = Path(os.environ.get("LOCALAPPDATA", HOME_DIR / "AppData" / "Local"))
+GLOBAL_SKILLS_DIR = Path(
+    os.environ.get("GEMINI_SKILLS_DIR", HOME_DIR / ".gemini" / "config" / "skills")
+)
+GLOBAL_PLUGINS_DIR = Path(
+    os.environ.get("GEMINI_PLUGINS_DIR", HOME_DIR / ".gemini" / "config" / "plugins")
+)
+HERMES_SKILLS_DIR = Path(
+    os.environ.get("HERMES_SKILLS_DIR", LOCAL_APP_DATA / "hermes" / "skills")
+)
+PROJECTS_DIR = Path(os.environ.get("PROJECTS_DIR", r"C:\projetos"))
 
 # Pasta do repositório de destino
 REPO_DIR = Path(__file__).resolve().parent
@@ -52,7 +62,15 @@ def find_all_skills() -> list[dict]:
                 skills_found.append({"path": item, "source": "Global Gemini"})
                 visited_paths.add(item)
                 
-    # 2. Varre pasta global de plugins buscando subpastas "skills"
+    # 2. Varre skills globais do Hermes, que podem estar em categorias.
+    if HERMES_SKILLS_DIR.exists():
+        for skill_md in HERMES_SKILLS_DIR.rglob("SKILL.md"):
+            item = skill_md.parent
+            if item not in visited_paths:
+                skills_found.append({"path": item, "source": "Global Hermes"})
+                visited_paths.add(item)
+
+    # 3. Varre pasta global de plugins buscando subpastas "skills"
     if GLOBAL_PLUGINS_DIR.exists():
         for plugin in GLOBAL_PLUGINS_DIR.iterdir():
             plugin_skills = plugin / "skills"
@@ -68,7 +86,7 @@ def find_all_skills() -> list[dict]:
                 skills_found.append({"path": plugin, "source": "Plugin Root"})
                 visited_paths.add(plugin)
                 
-    # 3. Varre projetos locais buscando pastas ".agents/skills" ou ".skills"
+    # 4. Varre projetos locais buscando pastas ".agents/skills" ou ".skills"
     if PROJECTS_DIR.exists():
         for proj in PROJECTS_DIR.iterdir():
             # Evita entrar na própria pasta 'skills' que estamos construindo
@@ -89,7 +107,7 @@ def find_all_skills() -> list[dict]:
                             
     return skills_found
 
-def sync_skills():
+def sync_skills(push: bool = False):
     print("🔍 Buscando skills no sistema...", file=sys.stderr)
     skills = find_all_skills()
     print(f"   Encontradas {len(skills)} skills válidas.\n", file=sys.stderr)
@@ -134,19 +152,25 @@ def sync_skills():
     # Gerar o README.md
     generate_readme(skills_meta)
     
-    # Git commit e push se configurado
-    git_push_changes()
+    # Alterações remotas são opt-in para que a sincronização local seja segura.
+    if push:
+        git_push_changes()
+    else:
+        print(
+            "\nℹ️  Sincronização concluída apenas localmente; nenhum push foi executado.",
+            file=sys.stderr,
+        )
 
 def generate_readme(skills_meta: list[dict]):
     readme_path = REPO_DIR / "README.md"
     print(f"\n📝 Atualizando README.md em {readme_path}...", file=sys.stderr)
     
     content = [
-        "# Central de Skills do Gemini e Claude 🧠",
+        "# Central de Skills do Gemini, Claude e Hermes 🧠",
         "",
         "Este repositório armazena e sincroniza centralizadamente todas as **Agent Skills** (competências) personalizadas e automatizadas disponíveis localmente nos projetos ou globalmente na máquina.",
         "",
-        "As Agent Skills estendem a capacidade do assistente de codificação (como o Gemini Antigravity ou Claude Code), permitindo que ele aprenda caminhos operacionais de engenharia, deploys e testes, mantendo a produtividade contínua entre sessões.",
+        "As Agent Skills estendem a capacidade de assistentes como Gemini Antigravity, Claude Code e Hermes, permitindo que eles aprendam caminhos operacionais de engenharia, deploys e testes, mantendo a produtividade contínua entre sessões.",
         "",
         "## 🛠️ Índice de Skills Disponíveis",
         "",
@@ -163,11 +187,11 @@ def generate_readme(skills_meta: list[dict]):
         "---",
         "",
         "## 🔄 Como Sincronizar",
-        "Para coletar novas skills criadas localmente nos projetos ou no diretório AppData global e atualizar este repositório no GitHub, basta executar o script localmente:",
+        "Para coletar novas skills criadas localmente nos projetos ou nos diretórios globais do Gemini e Hermes, execute:",
         "```powershell",
         "python sync_skills.py",
         "```",
-        "*(O script atualizará este README, copiará os arquivos e dará o push automático de volta para o GitHub).* "
+        "Por padrão, o script altera somente o clone local. Depois de revisar as mudanças e obter confirmação explícita para o push, use `python sync_skills.py --push` para também criar o commit e publicar no GitHub."
     ])
     
     with open(readme_path, "w", encoding="utf-8") as f:
@@ -207,4 +231,8 @@ def git_push_changes():
         print(f"   [WARN] Falha ao executar operações do Git: {e}", file=sys.stderr)
 
 if __name__ == "__main__":
-    sync_skills()
+    unknown_args = set(sys.argv[1:]) - {"--push"}
+    if unknown_args:
+        print(f"Argumentos desconhecidos: {', '.join(sorted(unknown_args))}", file=sys.stderr)
+        raise SystemExit(2)
+    sync_skills(push="--push" in sys.argv[1:])

@@ -1,6 +1,6 @@
 ---
 name: github-workflow-sergio
-description: "Use when working with GitHub. Enforces Sérgio's rules."
+description: "Use for Git/GitHub work. Enforces Sérgio's remote rules."
 version: 1.0.0
 ---
 
@@ -41,7 +41,10 @@ Operações de leitura não exigem confirmação prévia.
 - Clonar repositórios para um workspace autorizado.
 - Criar, trocar e modificar branches locais.
 - Criar, editar, mover ou remover arquivos dentro do workspace autorizado, respeitando as regras de proteção contra perda de trabalho local.
-- Instalar somente dependências declaradas pelo projeto e somente dentro do ambiente ou workspace do próprio projeto.
+- Instalar autonomamente somente dependências declaradas pelo projeto e somente dentro do ambiente ou workspace do próprio projeto.
+- Antes de instalar dependências, verifique se o gerenciador pode executar scripts ou hooks como `preinstall`, `install`, `postinstall`, lifecycle scripts ou equivalentes.
+- Se houver scripts ou hooks com efeitos não claramente confinados ao workspace, não os execute sem confirmação explícita.
+- Prefira opções seguras como `--ignore-scripts` quando isso for compatível com a tarefa e não impedir a instalação ou validação necessária.
 - Executar testes, lint, análise estática, formatação e builds.
 - Gerar e inspecionar diffs.
 - Fazer staging de alterações locais.
