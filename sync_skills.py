@@ -6,9 +6,18 @@ import subprocess
 from pathlib import Path
 
 # Configurações de diretórios de busca
-GLOBAL_SKILLS_DIR = Path(r"C:\Users\stgan\.gemini\config\skills")
-GLOBAL_PLUGINS_DIR = Path(r"C:\Users\stgan\.gemini\config\plugins")
+HOME_DIR = Path.home()
+LOCAL_APP_DATA = Path(os.environ.get("LOCALAPPDATA", HOME_DIR / "AppData" / "Local"))
+GLOBAL_SKILLS_DIR = Path(
+    os.environ.get("GEMINI_SKILLS_DIR", HOME_DIR / ".gemini" / "config" / "skills")
+)
+GLOBAL_PLUGINS_DIR = Path(
+    os.environ.get("GEMINI_PLUGINS_DIR", HOME_DIR / ".gemini" / "config" / "plugins")
+)
 PROJECTS_DIR = Path(r"c:\projetos")
+HERMES_SKILLS_DIR = Path(
+    os.environ.get("HERMES_SKILLS_DIR", LOCAL_APP_DATA / "hermes" / "skills")
+)
 
 # Pasta do repositório de destino
 REPO_DIR = Path(__file__).resolve().parent
@@ -52,7 +61,15 @@ def find_all_skills() -> list[dict]:
                 skills_found.append({"path": item, "source": "Global Gemini"})
                 visited_paths.add(item)
                 
-    # 2. Varre pasta global de plugins buscando subpastas "skills"
+    # 2. Varre skills globais do Hermes, que podem estar em categorias.
+    if HERMES_SKILLS_DIR.exists():
+        for skill_md in HERMES_SKILLS_DIR.rglob("SKILL.md"):
+            item = skill_md.parent
+            if item not in visited_paths:
+                skills_found.append({"path": item, "source": "Global Hermes"})
+                visited_paths.add(item)
+
+    # 3. Varre pasta global de plugins buscando subpastas "skills"
     if GLOBAL_PLUGINS_DIR.exists():
         for plugin in GLOBAL_PLUGINS_DIR.iterdir():
             plugin_skills = plugin / "skills"
@@ -68,7 +85,7 @@ def find_all_skills() -> list[dict]:
                 skills_found.append({"path": plugin, "source": "Plugin Root"})
                 visited_paths.add(plugin)
                 
-    # 3. Varre projetos locais buscando pastas ".agents/skills" ou ".skills"
+    # 4. Varre projetos locais buscando pastas ".agents/skills" ou ".skills"
     if PROJECTS_DIR.exists():
         for proj in PROJECTS_DIR.iterdir():
             # Evita entrar na própria pasta 'skills' que estamos construindo
@@ -92,6 +109,18 @@ def find_all_skills() -> list[dict]:
 def sync_skills():
     print("🔍 Buscando skills no sistema...", file=sys.stderr)
     skills = find_all_skills()
+    versioned_hermes_skill_md = DEST_SKILLS_DIR / "github-workflow-sergio" / "SKILL.md"
+    preserved_hermes_skill_md = None
+    hermes_github_workflow_found = any(
+        s["source"] == "Global Hermes" and s["path"].name == "github-workflow-sergio"
+        for s in skills
+    )
+    if not hermes_github_workflow_found and versioned_hermes_skill_md.exists():
+        preserved_hermes_skill_md = versioned_hermes_skill_md.read_bytes()
+        skills.append({
+            "path": versioned_hermes_skill_md.parent,
+            "source": "Global Hermes",
+        })
     print(f"   Encontradas {len(skills)} skills válidas.\n", file=sys.stderr)
     
     # Limpa a pasta 'skills' de destino anterior e reconstrói
@@ -107,10 +136,21 @@ def sync_skills():
         skill_name = src_path.name
         skill_md = src_path / "SKILL.md"
         
-        # Copia a pasta da skill inteira de forma recursiva (sobrescrevendo se for duplicada)
         dest_path = DEST_SKILLS_DIR / skill_name
         print(f"   Copiando [{s['source']}] {skill_name}…", file=sys.stderr)
-        shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
+        if s["source"] == "Global Hermes" and skill_name == "github-workflow-sergio":
+            if dest_path.exists():
+                shutil.rmtree(dest_path)
+            dest_path.mkdir(parents=True, exist_ok=True)
+            dest_skill_md = dest_path / "SKILL.md"
+            if preserved_hermes_skill_md is not None:
+                dest_skill_md.write_bytes(preserved_hermes_skill_md)
+            else:
+                shutil.copy2(skill_md, dest_skill_md)
+            skill_md = dest_skill_md
+        else:
+            # Copia a pasta da skill inteira de forma recursiva (sobrescrevendo se for duplicada)
+            shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
         
         # Parse dos metadados
         meta = parse_skill_metadata(skill_md)
