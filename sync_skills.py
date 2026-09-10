@@ -104,6 +104,14 @@ def find_all_skills() -> list[dict]:
 def sync_skills():
     print("🔍 Buscando skills no sistema...", file=sys.stderr)
     skills = find_all_skills()
+    versioned_hermes_skill_md = DEST_SKILLS_DIR / "github-workflow-sergio" / "SKILL.md"
+    preserved_hermes_skill_md = None
+    if not (HERMES_GITHUB_WORKFLOW_SKILL_DIR / "SKILL.md").exists() and versioned_hermes_skill_md.exists():
+        preserved_hermes_skill_md = versioned_hermes_skill_md.read_bytes()
+        skills.append({
+            "path": versioned_hermes_skill_md.parent,
+            "source": "Global Hermes",
+        })
     print(f"   Encontradas {len(skills)} skills válidas.\n", file=sys.stderr)
     
     # Limpa a pasta 'skills' de destino anterior e reconstrói
@@ -119,10 +127,21 @@ def sync_skills():
         skill_name = src_path.name
         skill_md = src_path / "SKILL.md"
         
-        # Copia a pasta da skill inteira de forma recursiva (sobrescrevendo se for duplicada)
         dest_path = DEST_SKILLS_DIR / skill_name
         print(f"   Copiando [{s['source']}] {skill_name}…", file=sys.stderr)
-        shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
+        if s["source"] == "Global Hermes" and skill_name == "github-workflow-sergio":
+            if dest_path.exists():
+                shutil.rmtree(dest_path)
+            dest_path.mkdir(parents=True, exist_ok=True)
+            dest_skill_md = dest_path / "SKILL.md"
+            if preserved_hermes_skill_md is not None:
+                dest_skill_md.write_bytes(preserved_hermes_skill_md)
+            else:
+                shutil.copy2(skill_md, dest_skill_md)
+            skill_md = dest_skill_md
+        else:
+            # Copia a pasta da skill inteira de forma recursiva (sobrescrevendo se for duplicada)
+            shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
         
         # Parse dos metadados
         meta = parse_skill_metadata(skill_md)
