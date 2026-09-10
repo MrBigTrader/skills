@@ -9,10 +9,8 @@ from pathlib import Path
 GLOBAL_SKILLS_DIR = Path(r"C:\Users\stgan\.gemini\config\skills")
 GLOBAL_PLUGINS_DIR = Path(r"C:\Users\stgan\.gemini\config\plugins")
 PROJECTS_DIR = Path(r"c:\projetos")
-HERMES_SKILLS_DIR = (
-    Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    / "hermes"
-    / "skills"
+HERMES_GITHUB_WORKFLOW_SKILL_DIR = Path(
+    r"C:\Users\Micro\AppData\Local\hermes\skills\software-development\github-workflow-sergio"
 )
 
 # Pasta do repositório de destino
@@ -57,13 +55,14 @@ def find_all_skills() -> list[dict]:
                 skills_found.append({"path": item, "source": "Global Gemini"})
                 visited_paths.add(item)
                 
-    # 2. Varre skills globais do Hermes, que podem estar em categorias.
-    if HERMES_SKILLS_DIR.exists():
-        for skill_md in HERMES_SKILLS_DIR.rglob("SKILL.md"):
-            item = skill_md.parent
-            if item not in visited_paths:
-                skills_found.append({"path": item, "source": "Global Hermes"})
-                visited_paths.add(item)
+    # 2. Inclui somente a skill github-workflow-sergio do Hermes.
+    skill_md = HERMES_GITHUB_WORKFLOW_SKILL_DIR / "SKILL.md"
+    if skill_md.exists() and HERMES_GITHUB_WORKFLOW_SKILL_DIR not in visited_paths:
+        skills_found.append({
+            "path": HERMES_GITHUB_WORKFLOW_SKILL_DIR,
+            "source": "Global Hermes",
+        })
+        visited_paths.add(HERMES_GITHUB_WORKFLOW_SKILL_DIR)
 
     # 3. Varre pasta global de plugins buscando subpastas "skills"
     if GLOBAL_PLUGINS_DIR.exists():
